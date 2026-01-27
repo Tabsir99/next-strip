@@ -1,0 +1,49 @@
+{
+  "name": "next-strip",
+  "version": "1.0.0",
+  "description": "Post-process Next.js builds to selectively remove unnecessary JavaScript for progressive enhancement",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "next-strip": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublish": "npm run build && npm pack && npm install -g next-strip-1.0.0.tgz && rm -rf next-strip-1.0.0.tgz"
+  },
+  "keywords": [
+    "nextjs",
+    "static",
+    "optimization",
+    "strip",
+    "progressive-enhancement",
+    "javascript-pruning"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "cheerio": "^1.0.0",
+    "commander": "^12.1.0",
+    "glob": "^10.3.10",
+    "html-minifier-terser": "^7.2.0",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@types/html-minifier-terser": "^7.0.2",
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  },
+  "files": [
+    "dist"
+  ]
+}
