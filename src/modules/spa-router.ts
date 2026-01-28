@@ -1,12 +1,5 @@
-/**
- * SPA Router Module
- * Provides a lightweight client-side router for routing-only pages
- */
+import { NAVIGATION_OPACITY, NAVIGATION_TRANSITION } from "../constants.js";
 
-/**
- * The minified SPA router script to be injected into HTML pages
- * This script provides client-side navigation without full page reloads
- */
 export const SPA_ROUTER_SCRIPT = `(function(){
   'use strict';
 
@@ -241,21 +234,6 @@ export const SPA_ROUTER_SCRIPT = `(function(){
   }
 })();`;
 
-/**
- * Get the minified SPA router script
- */
 export function getSpaRouterScript(): string {
-  return SPA_ROUTER_SCRIPT;
-}
-
-/**
- * Get the SPA router script with optional configuration
- */
-export function getSpaRouterScriptWithConfig(config?: {
-  prefetch?: boolean;
-  cacheEnabled?: boolean;
-}): string {
-  // For now, return the standard script
-  // Future: Add configuration options
   return SPA_ROUTER_SCRIPT;
 }
