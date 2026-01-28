@@ -1,20 +1,17 @@
-/**
- * Statistics Reporter Module
- * Generates and displays statistics about the dehydration process
- */
-
 import chalk from "chalk";
 import {
   PageClassification,
   type DehydrateStats,
   type ProcessedPage,
 } from "../types.js";
-import { formatBytes, formatDuration, formatPercent } from "../utils/logger.js";
+import { formatBytes, formatDuration } from "../utils/logger.js";
 import { basename } from "node:path";
 
-/**
- * Calculate statistics from processed pages
- */
+const SEPARATOR_LENGTH = 50;
+const DETAILS_PADDING = 40;
+const COUNT_PADDING = 4;
+const INDENT = "    ";
+
 export function calculateStats(
   pages: ProcessedPage[],
   startTime: number,
@@ -57,11 +54,8 @@ export function calculateStats(
   };
 }
 
-/**
- * Print a summary of the dehydration statistics
- */
 export function printStats(stats: DehydrateStats): void {
-  const separator = chalk.dim("─".repeat(50));
+  const separator = chalk.dim("─".repeat(SEPARATOR_LENGTH));
 
   console.log("");
   console.log(separator);
@@ -69,24 +63,8 @@ export function printStats(stats: DehydrateStats): void {
   console.log(separator);
   console.log("");
 
-  // Page classification breakdown
-  console.log(chalk.dim("  Page Classification:"));
-  console.log(
-    `    ${chalk.green("●")} Pure Static:   ${chalk.bold(stats.byClassification[PageClassification.PURE_STATIC].toString().padStart(4))} pages`,
-  );
-  console.log(
-    `    ${chalk.yellow("●")} Routing Only: ${chalk.bold(stats.byClassification[PageClassification.ROUTING_ONLY].toString().padStart(4))} pages`,
-  );
-  console.log(
-    `    ${chalk.blue("●")} Interactive:  ${chalk.bold(stats.byClassification[PageClassification.INTERACTIVE].toString().padStart(4))} pages`,
-  );
-  console.log(chalk.dim(`    ${"─".repeat(30)}`));
-  console.log(
-    `    Total:         ${chalk.bold(stats.totalPages.toString().padStart(4))} pages`,
-  );
-  console.log("");
+  printClassificationSummary(stats);
 
-  // Processing time
   console.log(
     chalk.dim(`  Completed in ${formatDuration(stats.processingTime)}`),
   );
@@ -98,40 +76,60 @@ export function printStats(stats: DehydrateStats): void {
   console.log("");
 
   for (const page of stats.pages) {
-    const icon = getClassificationIcon(page.analysis.classification);
-    const sizeDiff = page.analysis.originalSize - page.newSize;
-    const saved =
-      sizeDiff > 0
-        ? chalk.green(`-${formatBytes(sizeDiff)}`)
-        : chalk.dim("unchanged");
-
-    console.log(
-      `    ${icon} ${basename(page.analysis.absolutePath).padStart(40)}`,
-    );
-
-    console.log(
-      chalk.dim(
-        `       ${formatBytes(page.analysis.originalSize)} → ${formatBytes(page.newSize)} (${saved})`,
-      ),
-    );
-
-    if (page.scriptsRemoved > 0 || page.preloadsRemoved > 0) {
-      const parts: string[] = [];
-      if (page.scriptsRemoved > 0) parts.push(`${page.scriptsRemoved} scripts`);
-      if (page.preloadsRemoved > 0)
-        parts.push(`${page.preloadsRemoved} preloads`);
-      if (page.routerInjected) parts.push("router injected");
-
-      console.log(chalk.dim("       Removed: ") + parts.join(", "));
-    }
-
-    console.log("");
+    printPageDetails(page);
   }
 }
 
-/**
- * Get an icon for a page classification
- */
+function printClassificationSummary(stats: DehydrateStats): void {
+  console.log(chalk.dim("  Page Classification:"));
+
+  const classifications = [
+    { type: PageClassification.PURE_STATIC, label: "Pure Static:  ", color: chalk.green },
+    { type: PageClassification.ROUTING_ONLY, label: "Routing Only:", color: chalk.yellow },
+    { type: PageClassification.INTERACTIVE, label: "Interactive: ", color: chalk.blue },
+  ];
+
+  for (const { type, label, color } of classifications) {
+    const count = stats.byClassification[type].toString().padStart(COUNT_PADDING);
+    console.log(`${INDENT}${color("●")} ${label} ${chalk.bold(count)} pages`);
+  }
+
+  console.log(chalk.dim(`${INDENT}${"─".repeat(30)}`));
+  console.log(
+    `${INDENT}Total:         ${chalk.bold(stats.totalPages.toString().padStart(COUNT_PADDING))} pages`,
+  );
+  console.log("");
+}
+
+function printPageDetails(page: ProcessedPage): void {
+  const icon = getClassificationIcon(page.analysis.classification);
+  const fileName = basename(page.analysis.absolutePath).padStart(DETAILS_PADDING);
+  const sizeDiff = page.analysis.originalSize - page.newSize;
+  const saved =
+    sizeDiff > 0
+      ? chalk.green(`-${formatBytes(sizeDiff)}`)
+      : chalk.dim("unchanged");
+
+  console.log(`${INDENT}${icon} ${fileName}`);
+
+  console.log(
+    chalk.dim(
+      `       ${formatBytes(page.analysis.originalSize)} → ${formatBytes(page.newSize)} (${saved})`,
+    ),
+  );
+
+  if (page.scriptsRemoved > 0 || page.preloadsRemoved > 0 || page.routerInjected) {
+    const parts: string[] = [];
+    if (page.scriptsRemoved > 0) parts.push(`${page.scriptsRemoved} scripts`);
+    if (page.preloadsRemoved > 0) parts.push(`${page.preloadsRemoved} preloads`);
+    if (page.routerInjected) parts.push("router injected");
+
+    console.log(chalk.dim("       Removed: ") + parts.join(", "));
+  }
+
+  console.log("");
+}
+
 function getClassificationIcon(classification: PageClassification): string {
   switch (classification) {
     case PageClassification.PURE_STATIC:
@@ -143,9 +141,6 @@ function getClassificationIcon(classification: PageClassification): string {
   }
 }
 
-/**
- * Generate a JSON report
- */
 export function generateJsonReport(stats: DehydrateStats): string {
   return JSON.stringify(
     {

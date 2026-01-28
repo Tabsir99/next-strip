@@ -1,38 +1,23 @@
-/**
- * Build detection module
- * Detects whether we're working with a static export or standard Next.js build
- */
-
 import { existsSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import path, { join, resolve } from "node:path";
+import { join } from "node:path";
 import { BuildMode, type BuildDetectionResult } from "../types.js";
 import { createLogger } from "../utils/logger.js";
+import { DEFAULT_EXPORT_DIR, DEFAULT_BUILD_DIR, ROUTER_TYPES } from "../constants.js";
 
 const logger = createLogger("build-detection");
 
-/**
- * Default directories to check for builds
- */
-const DEFAULT_EXPORT_DIR = "out";
-const DEFAULT_BUILD_DIR = ".next";
-
-/**
- * Detect the build mode and return relevant paths
- */
 export async function detectBuild(): Promise<BuildDetectionResult> {
   const projectDir = process.cwd();
-
-  // Auto-detect: prefer out/ if it exists, otherwise check .next/
   const outDir = join(projectDir, DEFAULT_EXPORT_DIR);
   const nextDir = join(projectDir, DEFAULT_BUILD_DIR);
 
-  if (existsSync(outDir) && statSync(outDir).isDirectory()) {
+  if (isValidDirectory(outDir)) {
     logger.verbose(`Found static export directory: ${outDir}`);
     return await analyzeBuildDirectory(outDir);
   }
 
-  if (existsSync(nextDir) && statSync(nextDir).isDirectory()) {
+  if (isValidDirectory(nextDir)) {
     logger.verbose(`Found Next.js build directory: ${nextDir}`);
     return await analyzeBuildDirectory(nextDir);
   }
@@ -45,50 +30,41 @@ export async function detectBuild(): Promise<BuildDetectionResult> {
   );
 }
 
-function findRouterType(projectDir: string) {
-  const candidates = [
-    { path: "src/app", routerType: "app", sourceRoot: "src" },
-    { path: "src/pages", routerType: "pages", sourceRoot: "src" },
-    { path: "app", routerType: "app", sourceRoot: "." },
-    { path: "pages", routerType: "pages", sourceRoot: "." },
-  ] as const;
+function isValidDirectory(path: string): boolean {
+  return existsSync(path) && statSync(path).isDirectory();
+}
 
-  for (const c of candidates) {
-    const fullPath = join(projectDir, c.path);
+function findRouterType(projectDir: string) {
+  for (const candidate of ROUTER_TYPES) {
+    const fullPath = join(projectDir, candidate.path);
 
     if (existsSync(fullPath)) {
       return {
         routesDir: fullPath,
-        isAppRouter: c.routerType === "app",
+        isAppRouter: candidate.routerType === "app",
         sourceRootDir:
-          c.sourceRoot === "src" ? join(projectDir, "src") : projectDir,
+          candidate.sourceRoot === "src" ? join(projectDir, "src") : projectDir,
       };
     }
   }
 
-  throw new Error("No router type found");
+  throw new Error(
+    "No Next.js router directory found. Expected 'app' or 'pages' directory.",
+  );
 }
 
-/**
- * Analyze a directory to determine build mode and paths
- */
 async function analyzeBuildDirectory(
   dir: string,
 ): Promise<BuildDetectionResult> {
   const projectDir = process.cwd();
+  const entries = await readdir(dir).catch(() => [] as string[]);
 
-  const entries: string[] = await readdir(dir).catch(() => [] as string[]);
-
-  // Check for .next build structure
   const hasServerDir = entries.includes("server");
   const hasStaticDir = entries.includes("static");
   const hasBuildManifest = entries.includes("build-manifest.json");
-
-  // Check for static export structure (has index.html at root or in subdirs)
   const hasIndexHtml = entries.includes("index.html");
   const hasNextStaticDir = entries.includes("_next");
 
-  // Determine if this is a static export or standard build
   const isStaticExport = hasIndexHtml || (hasNextStaticDir && !hasServerDir);
   const isStandardBuild = hasServerDir && hasStaticDir && hasBuildManifest;
 
@@ -124,38 +100,23 @@ async function analyzeBuildDirectory(
   );
 }
 
-/**
- * Validate that the build directory is accessible and contains expected files
- */
 export async function validateBuild(
   result: BuildDetectionResult,
 ): Promise<void> {
-  // Check that HTML directory exists
   if (!existsSync(result.htmlDir)) {
     throw new Error(`HTML directory not found: ${result.htmlDir}`);
   }
 
-  // For standard builds, verify the structure
   if (result.mode === BuildMode.STANDARD_BUILD) {
-    const requiredFiles = ["build-manifest.json"];
-
-    for (const file of requiredFiles) {
-      const filePath = join(result.buildDir, file);
-      if (!existsSync(filePath)) {
-        throw new Error(`Required build file not found: ${filePath}`);
-      }
+    const manifestPath = join(result.buildDir, "build-manifest.json");
+    if (!existsSync(manifestPath)) {
+      throw new Error(`Required build file not found: ${manifestPath}`);
     }
   }
 }
 
-/**
- * Get a human-readable description of the build mode
- */
 export function describeBuildMode(mode: BuildMode): string {
-  switch (mode) {
-    case BuildMode.STATIC_EXPORT:
-      return "Static Export (out/)";
-    case BuildMode.STANDARD_BUILD:
-      return "Standard Build (.next/)";
-  }
+  return mode === BuildMode.STATIC_EXPORT
+    ? "Static Export (out/)"
+    : "Standard Build (.next/)";
 }

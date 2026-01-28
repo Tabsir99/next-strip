@@ -1,8 +1,3 @@
-/**
- * next-strip
- * Post-process Next.js builds to selectively remove unnecessary JavaScript
- */
-
 import ora from "ora";
 import chalk from "chalk";
 import {
@@ -26,38 +21,46 @@ import { createLogger, setVerbose } from "./utils/logger.js";
 
 const logger = createLogger();
 
-/**
- * Main dehydration function
- */
 export async function dehydrate(
   config: DehydrateConfig,
 ): Promise<DehydrateStats> {
   const startTime = Date.now();
-
-  // Set verbose mode
   setVerbose(config.verbose);
 
-  // Step 1: Detect build mode
+  const buildResult = await detectBuildMode();
+  const generatedPages = await findPages(buildResult);
+  const analyses = await analyzePages(generatedPages, buildResult);
+  const processedPages = await processPages(buildResult, analyses);
+
+  const stats = calculateStats(processedPages, startTime);
+  printStats(stats);
+  printOutputLocation(buildResult);
+
+  return stats;
+}
+
+async function detectBuildMode() {
   const spinner = ora("Detecting build mode...").start();
 
-  let buildResult;
   try {
-    buildResult = await detectBuild();
+    const buildResult = await detectBuild();
     await validateBuild(buildResult);
     spinner.succeed(
       `Detected: ${chalk.cyan(describeBuildMode(buildResult.mode))}`,
     );
+    return buildResult;
   } catch (error) {
     spinner.fail("Build detection failed");
     throw error;
   }
+}
 
-  // Step 2: Find HTML files
-  spinner.start("Finding generated pages...");
+async function findPages(buildResult: Awaited<ReturnType<typeof detectBuild>>) {
+  const spinner = ora("Finding generated pages...").start();
 
-  let generatedPages: { html: string; sourceJsx: string }[];
   try {
-    generatedPages = await findGeneratedPages(buildResult);
+    const generatedPages = await findGeneratedPages(buildResult);
+
     if (generatedPages.length === 0) {
       spinner.fail("No HTML pages found");
       throw new Error(
@@ -65,47 +68,58 @@ export async function dehydrate(
           'Ensure you have run "next build" and the build completed successfully.',
       );
     }
+
     spinner.succeed(
       `Found ${chalk.cyan(generatedPages.length)} generated pages`,
     );
+    return generatedPages;
   } catch (error) {
     spinner.fail("Failed to find HTML files");
     throw error;
   }
+}
 
-  // Step 3: Analyze pages
-  spinner.start("Analyzing pages...");
+async function analyzePages(
+  generatedPages: { html: string; sourceJsx: string }[],
+  buildResult: Awaited<ReturnType<typeof detectBuild>>,
+) {
+  const spinner = ora("Analyzing pages...").start();
 
-  const analyses: PageAnalysis[] = [];
   try {
+    const analyses: PageAnalysis[] = [];
+
     for (const page of generatedPages) {
       const analysis = await analyzeGeneratedPage({ page, buildResult });
       analyses.push(analysis);
     }
+
     spinner.succeed(`Analyzed ${chalk.cyan(analyses.length)} pages`);
+    return analyses;
   } catch (error) {
     spinner.fail("Page analysis failed");
     throw error;
   }
+}
 
-  // Step 5: Process and generate output
-  spinner.start("Processing pages...");
+async function processPages(
+  buildResult: Awaited<ReturnType<typeof detectBuild>>,
+  analyses: PageAnalysis[],
+) {
+  const spinner = ora("Processing pages...").start();
 
-  let processedPages;
   try {
-    processedPages = await generateOutput(buildResult, analyses);
+    const processedPages = await generateOutput(buildResult, analyses);
     spinner.succeed(`Processed ${chalk.cyan(processedPages.length)} pages`);
+    return processedPages;
   } catch (error) {
     spinner.fail("Processing failed");
     throw error;
   }
+}
 
-  // Step 6: Calculate and display statistics
-  const stats = calculateStats(processedPages, startTime);
-  printStats(stats);
-
-  // Show output location
+function printOutputLocation(buildResult: Awaited<ReturnType<typeof detectBuild>>) {
   console.log("");
+
   if (buildResult.mode === BuildMode.STANDARD_BUILD) {
     logger.success(
       `Build optimized in place: ${chalk.cyan(buildResult.buildDir)}`,
@@ -115,14 +129,10 @@ export async function dehydrate(
     logger.success(`Output written to: ${chalk.cyan(buildResult.buildDir)}`);
     console.log(chalk.dim("  Serve with any static file server"));
   }
-  console.log("");
 
-  return stats;
+  console.log("");
 }
 
-/**
- * Export types for external use
- */
 export {
   PageClassification,
   BuildMode,
